@@ -45,19 +45,14 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
+/* T1 的量測資料 */
 volatile uint32_t t1_period_ticks = 0;
 volatile uint32_t t1_low_ticks = 0;
-
-
 volatile uint32_t t1_last_update_ms = 0;
 volatile uint32_t t1_age_ms = 0;
-
 volatile uint8_t t1_has_sample = 0;
-
 volatile uint8_t t1_timeout = 0;
-
-volatile uint8_t pwm_format_ok = 0;
-
+volatile uint8_t t1_pwm_format_ok = 0;
 
 
 /* T2 的量測資料 */
@@ -66,7 +61,8 @@ volatile uint32_t t2_low_ticks = 0;
 volatile uint32_t t2_last_update_ms = 0;
 volatile uint8_t t2_has_sample = 0;
 volatile uint8_t t2_pwm_format_ok = 0;
-
+volatile uint8_t t2_timeout = 0;
+volatile uint32_t t2_age_ms = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -175,11 +171,33 @@ int main(void)
 
 	}
 
+	else if(t2_has_sample == 1)
+	{
+		uint32_t last_update = t2_last_update_ms;
+		uint32_t now = HAL_GetTick();
+
+		t2_age_ms = now - last_update;
+
+		if (t2_age_ms >= 5U)
+		{
+			t2_timeout = 1;
+
+		}
+		else
+		{
+			t2_timeout = 0;
+		}
+	}
+
 	else
 	{
 	    /* 尚未收到資料，暫不計算資料年齡 */
 	    t1_age_ms = 0;
 	    t1_timeout = 0;
+
+	    t2_age_ms = 0;
+	    t2_timeout = 0;
+
 	}
 
 
@@ -411,10 +429,10 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
   static uint8_t first_capture = 1;
   static uint8_t t2_first_capture = 1;
-  float duty_percent = 0.0; // duty cycle(%)
 
 
-  /* 只處理 TIM2 的 CH1 擷取通知 */
+
+
   if (htim->Instance == TIM2 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
   {
     /* 第一筆可能不完整，先捨棄 */
@@ -424,12 +442,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
       return;
     }
 
-    pwm_format_ok = 0;
-
+    t1_pwm_format_ok = 0;
     t1_period_ticks = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
-
     t1_low_ticks = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-
     t1_last_update_ms = HAL_GetTick();
     t1_has_sample = 1; //Handle null
 
@@ -438,12 +453,12 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
     	float frequency_hz = 1000000.0f / t1_period_ticks;  //TIM2 Input clock：64 MHz
 
-    	duty_percent = 100.0f * t1_low_ticks / t1_period_ticks;
+    	float duty_percent = 100.0f * t1_low_ticks / t1_period_ticks;
 
 
     	if((duty_percent >= 6.25f) && (duty_percent <= 93.75f) && (frequency_hz >= 1700.0f) && (frequency_hz <= 2300.0f)){
 
-    		pwm_format_ok = 1;
+    		t1_pwm_format_ok = 1;
     	}
 
 
@@ -458,16 +473,6 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   else if(htim->Instance == TIM3 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
   {
 
-	  t2_period_ticks = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
-
-	  t2_low_ticks = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-
-	  t2_last_update_ms = HAL_GetTick();
-	  t2_has_sample = 1;
-
-
-
-	  float frequency_hz = 1000000.0f / t1_period_ticks;  //TIM3 Input clock：64 MHz
 
 	  if (t2_first_capture)
 	  {
@@ -475,7 +480,16 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 		  return;
 	  }
 
+	  t2_period_ticks = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+	  t2_low_ticks = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+	  t2_last_update_ms = HAL_GetTick();
+	  t2_has_sample = 1;
+	  t2_pwm_format_ok = 0;
 
+	  float duty_percent = 100.0f * t2_low_ticks / t2_period_ticks;
+	  float frequency_hz = 1000000.0f / t2_period_ticks;  //TIM3 Input clock：64 MHz
+
+	  t2_last_update_ms = HAL_GetTick();
 
 	  if((t2_period_ticks > 0) && (t2_low_ticks <= t2_period_ticks))
 	  {
