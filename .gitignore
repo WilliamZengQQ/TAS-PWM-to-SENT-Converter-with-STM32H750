@@ -1,0 +1,7 @@
+# 編譯產物
+Debug/
+Release/
+build/
+
+# IDE 工作區資料
+.metadata/
