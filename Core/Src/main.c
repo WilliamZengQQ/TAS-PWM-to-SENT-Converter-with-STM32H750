@@ -119,6 +119,7 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
+
   /* 先啟用 CH2，擷取低電位時間 */
   if (HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_2) != HAL_OK)
   {
